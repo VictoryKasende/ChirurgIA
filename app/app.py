@@ -199,15 +199,28 @@ def biomarkers_to_features(biomarkers: BiomarkerData) -> np.ndarray:
     ])
     return features
 
+def biomarkers_to_dataframe(biomarkers: BiomarkerData) -> pd.DataFrame:
+    """Convertit les biomarqueurs en DataFrame avec noms de colonnes (pour éviter warnings)"""
+    import pandas as pd
+    
+    feature_names = [
+        'Temperature', 'pH', 'pCO2', 'pO2', 'HCO3', 'BE', 'Lactate', 'Na',
+        'K', 'Cl', 'Urea', 'Creatinine', 'HGT', 'WCC', 'HGB', 'PLT', 'INR'
+    ]
+    
+    features = biomarkers_to_features(biomarkers)
+    return pd.DataFrame([features], columns=feature_names)
+
 def extract_mortality_features(biomarkers: BiomarkerData, text_data: ClinicalTextData) -> tuple:
     """
     Extrait les features pour la prédiction de mortalité
     
     Returns:
-        numeric_features: 17 features pour le RobustScaler  
+        numeric_df: DataFrame 17 features pour le RobustScaler  
         full_features: 49 features pour le modèle XGBoost
     """
-    # 17 features numériques pour le scaler
+    # 17 features numériques pour le scaler (en DataFrame)
+    numeric_df = biomarkers_to_dataframe(biomarkers)
     numeric_features = biomarkers_to_features(biomarkers)
     
     # Features textuelles basiques (4 features)
@@ -247,17 +260,18 @@ def extract_mortality_features(biomarkers: BiomarkerData, text_data: ClinicalTex
     # Combiner pour 49 features total
     full_features = np.concatenate([numeric_features, text_features, derived_features])
     
-    return numeric_features.reshape(1, -1), full_features.reshape(1, -1)
+    return numeric_df, full_features.reshape(1, -1)
 
 def extract_death_cause_features(biomarkers: BiomarkerData, text_data: ClinicalTextData) -> tuple:
     """
     Extrait les features pour la prédiction des causes de décès
     
     Returns:
-        numeric_features: 17 features pour le scaler
+        numeric_df: DataFrame 17 features pour le scaler
         combined_features: 18 features pour le classifier
     """
-    # 17 features numériques pour le scaler
+    # 17 features numériques pour le scaler (en DataFrame)
+    numeric_df = biomarkers_to_dataframe(biomarkers)
     numeric_features = biomarkers_to_features(biomarkers)
     
     # 1 feature textuelle principale pour arriver à 18
@@ -267,7 +281,7 @@ def extract_death_cause_features(biomarkers: BiomarkerData, text_data: ClinicalT
     # Combiner pour 18 features
     combined_features = np.concatenate([numeric_features, [diagnostic_complexity]])
     
-    return numeric_features.reshape(1, -1), combined_features.reshape(1, -1)
+    return numeric_df, combined_features.reshape(1, -1)
 
 def extract_clustering_features(biomarkers: BiomarkerData) -> np.ndarray:
     """
@@ -515,10 +529,10 @@ async def predict_mortality(patient_data: PatientData, patient_id: Optional[str]
         label_encoder = load_model("label_encoder")
         
         # Extraire les features correctement
-        numeric_features, full_features = extract_mortality_features(patient_data.biomarkers, patient_data.clinical_texts)
+        numeric_df, full_features = extract_mortality_features(patient_data.biomarkers, patient_data.clinical_texts)
         
-        # Appliquer le scaler sur les 17 features numériques seulement
-        numeric_scaled = scaler.transform(numeric_features)
+        # Appliquer le scaler sur le DataFrame (évite les warnings)
+        numeric_scaled = scaler.transform(numeric_df)
         
         # Remplacer les 17 premières features dans le vecteur complet par les valeurs scalées
         full_features_scaled = full_features.copy()
@@ -615,10 +629,10 @@ async def predict_death_cause(patient_data: PatientData, patient_id: Optional[st
         label_encoder = load_model("death_cause_label_encoder")
         
         # Extraire les features correctement
-        numeric_features, classifier_features = extract_death_cause_features(patient_data.biomarkers, patient_data.clinical_texts)
+        numeric_df, classifier_features = extract_death_cause_features(patient_data.biomarkers, patient_data.clinical_texts)
         
-        # Appliquer le scaler sur les 17 features numériques seulement
-        numeric_scaled = scaler.transform(numeric_features)
+        # Appliquer le scaler sur le DataFrame (évite les warnings)
+        numeric_scaled = scaler.transform(numeric_df)
         
         # Remplacer les 17 premières features dans le vecteur de 18 par les valeurs scalées
         classifier_features_scaled = classifier_features.copy()
@@ -651,16 +665,26 @@ async def predict_death_cause(patient_data: PatientData, patient_id: Optional[st
         
         # Cause prédite
         try:
-            predicted_cause = label_encoder.inverse_transform([int(prediction_binary)])[0]
+            # Si prediction_binary est déjà un string (nom de la catégorie)
+            if isinstance(prediction_binary, str):
+                predicted_cause = prediction_binary
+            else:
+                # Si c'est un index, le convertir
+                predicted_cause = label_encoder.inverse_transform([int(prediction_binary)])[0]
         except Exception as label_error:
             logger.error(f"Erreur de label: {label_error}")
             # Mapper manuellement si nécessaire
             available_labels = label_encoder.classes_
-            pred_idx = int(prediction_binary) if isinstance(prediction_binary, (int, float)) else 0
-            if 0 <= pred_idx < len(available_labels):
-                predicted_cause = available_labels[pred_idx]
+            if isinstance(prediction_binary, str):
+                # Si c'est déjà un string, le garder
+                predicted_cause = prediction_binary if prediction_binary in available_labels else "Causes_Diverses"
             else:
-                predicted_cause = "Causes_Diverses"
+                # Si c'est un nombre, l'utiliser comme index
+                pred_idx = int(prediction_binary) if isinstance(prediction_binary, (int, float)) else 0
+                if 0 <= pred_idx < len(available_labels):
+                    predicted_cause = available_labels[pred_idx]
+                else:
+                    predicted_cause = "Causes_Diverses"
         
         # Top 3 causes avec gestion d'erreur
         top_3_indices = np.argsort(prediction_proba)[-3:][::-1]
