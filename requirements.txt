@@ -26,9 +26,10 @@ shap>=0.42.0
 lime>=0.2.0
 eli5>=0.13.0
 
-# Web Application
-streamlit>=1.25.0
-flask>=2.3.0
+# Web Application & API
+fastapi>=0.115.0
+uvicorn>=0.30.0
+python-multipart>=0.0.20
 
 # Utility Libraries
 tqdm>=4.65.0
