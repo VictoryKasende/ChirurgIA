@@ -334,6 +334,6 @@ Ce projet est développé à des fins **éducatives et de recherche**. Pour un u
 *Développé avec ❤️ pour améliorer les soins chirurgicaux*
 
 [![GitHub](https://img.shields.io/badge/GitHub-ChirurgIA-181717?style=flat&logo=github)](https://github.com/VictoryKasende/ChirurgIA)
-[![Contact](https://img.shields.io/badge/Contact-victory.kasende%40example.com-blue?style=flat&logo=gmail)](mailto:victory.kasende@example.com)
+[![Contact](https://img.shields.io/badge/Contact-victory.kasende%40example.com-blue?style=flat&logo=gmail)](mailto:victorykasende@gmail.com)
 
 </div>
